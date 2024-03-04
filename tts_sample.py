@@ -1,38 +1,44 @@
+import numpy as np
 from TTS.api import TTS
-import PyPDF2
+import pdfplumber
 import re
-from tika import parser
+
 
 class Main:
+    the_set: set = {"init"}
 
     def __init__(self, from_page, to_page):
         tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=True)
-        reader = PyPDF2.PdfReader('Spring_Microservices.pdf')
-        x = 0
-        string_to_append = ""
-        for page in reader.pages:
-            x = x + 1
-            if x < from_page:
-                continue
-            if x > to_page:
-                break
-            new_string = page.extract_text()
-            re.search("Chapter \\d", new_string);
-            string_to_append = string_to_append + "\n"
-            string_to_append = string_to_append + page.extract_text().replace("-\n","").replace("\n"," ")
-        print(string_to_append);
+        concat = None
+        with pdfplumber.open('Spring_Microservices.pdf') as pdf:
+            for x in range(from_page, to_page):
+                text = pdf.pages[x]
+                clean_text = text.filter(lambda obj: self.filter(obj))
+                print(self.the_set)
+                string = clean_text.extract_text().replace("-\n", "").replace("\n", " ")
+                # string = re.sub("[^a-zA-Z1-9. \\(\\)]", "", string)
+                print(string)
+                wav: np.ndarray = tts.tts(
+                    text=string,
+                    speaker_wav="Lux_Elementalist_Fire_Move_10.ogg",
+                    speed=1.5,
+                    language="en")
+                print("Page: " + str(x) + " done!")
+                if concat is None:
+                    concat = wav
+                else:
+                    np.concatenate([concat, wav])
+        tts.synthesizer.save_wav(wav=concat, path="output_" + str(from_page) + "_" + str(to_page) + ".wav")
+        print(self.the_set)
 
-        tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=True)
-        tts.tts_to_file(
-            text=string_to_append,
-            file_path="output_lux_130_140.wav",
-            speaker_wav="Lux_Elementalist_Fire_Move_10.ogg",
-            speed=1.5,
-            language="en")
+    def filter(self, obj) -> bool:
+        #if "fontname" in obj:
+        #    self.the_set.add(obj["fontname"])
+        return obj["object_type"] == "char" and not (
+                "Bold" in obj["fontname"] or "Courier" in obj["fontname"])
 
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
 
-
 if __name__ == '__main__':
-    Main(130, 140)
+    Main(130, 135)
